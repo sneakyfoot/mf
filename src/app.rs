@@ -1,4 +1,4 @@
-use crate::data::{Data, sample_data};
+use crate::data::{Data, fetch_data};
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
@@ -7,6 +7,7 @@ use ratatui::{
     widgets::{Row, Table, TableState},
 };
 use std::error::Error;
+use tokio::runtime::Runtime;
 
 pub struct App {
     state: TableState,
@@ -14,11 +15,13 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
+        let rt = Runtime::new()?;
+        let items = rt.block_on(fetch_data())?;
+        Ok(Self {
             state: TableState::default().with_selected(0),
-            items: sample_data(),
-        }
+            items,
+        })
     }
 
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
