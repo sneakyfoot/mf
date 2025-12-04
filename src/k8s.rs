@@ -1,8 +1,7 @@
-use futures::{StreamExt, TryStreamExt};
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
     Client,
-    api::{Api, ListParams, PostParams, ResourceExt},
+    api::{Api, ListParams},
 };
 use std::error::Error;
 

@@ -1,12 +1,15 @@
 use crate::k8s::get_pods;
 use ::std::error::Error;
-use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::{
+    api::core::v1::Pod,
+    chrono::{DateTime, Utc},
+};
 use kube::ResourceExt;
 
 pub struct Data {
     pub name: String,
     pub status: String,
-    pub age: String,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 pub async fn fetch_data() -> Result<Vec<Data>, Box<dyn Error>> {
@@ -24,30 +27,10 @@ fn pod_to_data(pod: Pod) -> Data {
         .as_ref()
         .and_then(|s| s.phase.clone())
         .unwrap_or_else(|| "Unknown".into());
-    let age = pod
-        .metadata
-        .creation_timestamp
-        .as_ref()
-        .map(|t| format!("{}", t.0))
-        .unwrap_or_else(|| "n/a".into());
+    let created_at = pod.metadata.creation_timestamp.as_ref().map(|t| t.0);
     Data {
         name: pod.name_any(),
         status,
-        age,
+        created_at,
     }
-}
-
-pub fn sample_data() -> Vec<Data> {
-    vec![
-        Data {
-            name: "render-beauty-fkas45".into(),
-            status: "Running".into(),
-            age: "24m".into(),
-        },
-        Data {
-            name: "sim-pyro-3daf4".into(),
-            status: "Pending".into(),
-            age: "95m".into(),
-        },
-    ]
 }
