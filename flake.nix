@@ -6,6 +6,7 @@
   };
 
   outputs = { self, nixpkgs }:
+
   let
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
@@ -15,13 +16,10 @@
         rustc
         cargo
         rust-analyzer
-
+        rustfmt
         pkg-config
         kubectl
-
       ];
-
     };
-
   };
 }
