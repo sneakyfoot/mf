@@ -7,7 +7,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::Constraint,
     style::{Modifier, Style},
-    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState, Wrap},
 };
 use std::error::Error;
 use std::time::Duration;
@@ -47,6 +47,7 @@ impl App {
         })
     }
 
+    // Main loop
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
         let tick = Duration::from_secs(1);
         loop {
@@ -58,15 +59,14 @@ impl App {
                         if self.handle_key(key)? {
                             return Ok(());
                         }
+                        if matches!(self.mode, Mode::Logs { .. }) {
+                            self.drain_logs();
+                        }
                     }
                 }
             } else {
                 if matches!(self.mode, Mode::Logs { .. }) {
-                    if let Some(rx) = self.log_rx.as_mut() {
-                        while let Ok(line) = rx.try_recv() {
-                            self.logs.push(line);
-                        }
-                    }
+                    self.drain_logs();
                 } else {
                     if let Ok(items) = self.rt.block_on(fetch_data()) {
                         self.items = items;
@@ -94,18 +94,24 @@ impl App {
                 .as_ref()
                 .map(format_age)
                 .unwrap_or_else(|| "n/a".into());
-            Row::new(vec![item.name.clone(), item.status.clone(), age])
+            Row::new(vec![
+                item.name.clone(),
+                item.status.clone(),
+                item.node.clone(),
+                age,
+            ])
         });
 
         let table = Table::new(
             rows,
             [
-                Constraint::Percentage(25),
-                Constraint::Percentage(45),
-                Constraint::Percentage(30),
+                Constraint::Percentage(55),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
             ],
         )
-        .header(Row::new(vec!["Name", "Status", "Age"]))
+        .header(Row::new(vec!["Name", "Status", "Node", "Age"]))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
         .highlight_symbol("⇝");
 
@@ -114,17 +120,26 @@ impl App {
 
     // Log view
     fn draw_logs(&mut self, frame: &mut Frame, pod: &str) {
+        let area = frame.area();
+
         let text = if self.logs.is_empty() {
-            format!("(no data yet)")
+            "(no data yet)".to_string()
         } else {
             format!("Start Logs for {}\n{}", pod, self.logs.join("\n"))
         };
-        let para = Paragraph::new(text).block(
-            Block::default()
-                .title(format!("Logs for {}", pod))
-                .borders(Borders::ALL),
-        );
-        frame.render_widget(para, frame.area());
+
+        let block = Block::default()
+            .title(format!("Logs for {}", pod))
+            .borders(Borders::ALL);
+
+        let para = Paragraph::new(text.clone())
+            .block(block)
+            .wrap(Wrap { trim: false });
+
+        let total_lines = para.line_count(area.width) as u16;
+        let scroll_y = total_lines.saturating_sub(area.height);
+
+        frame.render_widget(para.scroll((scroll_y, 0)), area);
     }
 
     // Keybinds
@@ -153,6 +168,7 @@ impl App {
         Ok(false)
     }
 
+    // Spawn async log stream
     fn start_log_mode(&mut self) {
         if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -191,24 +207,38 @@ impl App {
             };
         }
     }
-
-    fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) if i + 1 < self.items.len() => i + 1,
-            _ => 0,
-        };
-        self.state.select(Some(i));
+    fn drain_logs(&mut self) {
+        if let Some(rx) = self.log_rx.as_mut() {
+            while let Ok(line) = rx.try_recv() {
+                self.logs.push(line);
+            }
+        }
     }
 
+    // Next line in table keymap
+    fn next(&mut self) {
+        if let Some(i) = self.state.selected() {
+            if i + 1 < self.items.len() {
+                self.state.select(Some(i + 1));
+            }
+        } else if !self.items.is_empty() {
+            self.state.select(Some(0));
+        }
+    }
+
+    // Prev line in table keymap
     fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(0) | None => self.items.len().saturating_sub(1),
-            Some(i) => i - 1,
-        };
-        self.state.select(Some(i));
+        if let Some(i) = self.state.selected() {
+            if i > 0 {
+                self.state.select(Some(i - 1));
+            }
+        } else if !self.items.is_empty() {
+            self.state.select(Some(0));
+        }
     }
 }
 
+// Turn pod birth time into human readble age string
 fn format_age(created: &DateTime<Utc>) -> String {
     let secs = Utc::now().signed_duration_since(*created).num_seconds();
     if secs < 0 {
