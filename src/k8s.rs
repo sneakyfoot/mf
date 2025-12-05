@@ -19,7 +19,7 @@ pub async fn stream_logs(pod: &str) -> Result<impl futures::AsyncBufRead + Unpin
     let pods: Api<Pod> = Api::namespaced(client, ns);
     let lp = LogParams {
         follow: true,
-        tail_lines: Some(200),
+        tail_lines: Some(100),
         ..LogParams::default()
     };
     pods.log_stream(pod, &lp).await
