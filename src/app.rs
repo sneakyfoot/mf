@@ -1,4 +1,5 @@
 use crate::data::{Data, fetch_data};
+use crate::k8s::stream_logs;
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
 use ratatui::{
@@ -6,7 +7,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::Constraint,
     style::{Modifier, Style},
-    widgets::{Row, Table, TableState},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 use std::error::Error;
 use std::time::Duration;
@@ -22,6 +23,8 @@ pub struct App {
     rt: Runtime,
     mode: Mode,
     logs: Vec<String>,
+    log_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
+    log_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 enum Mode {
@@ -39,6 +42,8 @@ impl App {
             rt,
             mode: Mode::Table,
             logs: Vec::new(),
+            log_rx: None,
+            log_task: None,
         })
     }
 
@@ -56,8 +61,16 @@ impl App {
                     }
                 }
             } else {
-                if let Ok(items) = self.rt.block_on(fetch_data()) {
-                    self.items = items;
+                if matches!(self.mode, Mode::Logs { .. }) {
+                    if let Some(rx) = self.log_rx.as_mut() {
+                        while let Ok(line) = rx.try_recv() {
+                            self.logs.push(line);
+                        }
+                    }
+                } else {
+                    if let Ok(items) = self.rt.block_on(fetch_data()) {
+                        self.items = items;
+                    }
                 }
             }
         }
@@ -94,17 +107,24 @@ impl App {
         )
         .header(Row::new(vec!["Name", "Status", "Age"]))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
-        .highlight_symbol(">> ");
+        .highlight_symbol("⇝");
 
         frame.render_stateful_widget(table, frame.area(), &mut self.state);
     }
 
     // Log view
     fn draw_logs(&mut self, frame: &mut Frame, pod: &str) {
-        let block = ratatui::widgets::Block::default()
-            .title(format!("Logs for {}", pod))
-            .borders(ratatui::widgets::Borders::ALL);
-        frame.render_widget(block, frame.area());
+        let text = if self.logs.is_empty() {
+            format!("(no data yet)")
+        } else {
+            format!("Start Logs for {}\n{}", pod, self.logs.join("\n"))
+        };
+        let para = Paragraph::new(text).block(
+            Block::default()
+                .title(format!("Logs for {}", pod))
+                .borders(Borders::ALL),
+        );
+        frame.render_widget(para, frame.area());
     }
 
     // Keybinds
@@ -135,10 +155,40 @@ impl App {
 
     fn start_log_mode(&mut self) {
         if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let pod = idx.name.clone();
+            self.log_rx = Some(rx);
+            let rt_handle = &self.rt;
+            self.log_task = Some(self.rt.spawn(async move {
+                match stream_logs(&pod).await {
+                    Ok(reader) => {
+                        use futures::AsyncBufReadExt;
+                        use futures::StreamExt;
+                        use futures::io::BufReader;
+                        let mut lines = BufReader::new(reader).lines();
+                        while let Some(line) = lines.next().await {
+                            match line {
+                                Ok(line) => {
+                                    if tx.send(line).is_err() {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    let _ = tx.send(format!("Log error: {e}"));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(format!("Log error: {e}"));
+                    }
+                }
+            }));
+            self.logs.clear();
             self.mode = Mode::Logs {
                 pod: idx.name.clone(),
             };
-            self.logs.clear();
         }
     }
 
