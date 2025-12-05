@@ -22,6 +22,8 @@ pub struct App {
     items: Vec<Data>,
     rt: Runtime,
     mode: Mode,
+    scroll_offset: u16,
+    max_log_lines: u16,
     logs: Vec<String>,
     log_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
     log_task: Option<tokio::task::JoinHandle<()>>,
@@ -41,6 +43,8 @@ impl App {
             items,
             rt,
             mode: Mode::Table,
+            scroll_offset: 0,
+            max_log_lines: 0,
             logs: Vec::new(),
             log_rx: None,
             log_task: None,
@@ -137,8 +141,9 @@ impl App {
             .wrap(Wrap { trim: false });
 
         let total_lines = para.line_count(area.width) as u16;
-        let scroll_y = total_lines.saturating_sub(area.height);
-
+        let mut scroll_y = total_lines.saturating_sub(area.height);
+        self.max_log_lines = scroll_y;
+        scroll_y = scroll_y.saturating_sub(self.scroll_offset);
         frame.render_widget(para.scroll((scroll_y, 0)), area);
     }
 
@@ -158,8 +163,11 @@ impl App {
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('q') => {
                         self.mode = Mode::Table;
+                        self.scroll_offset = 0;
                         self.logs.clear();
                     }
+                    KeyCode::Char('k') | KeyCode::Up => self.scroll_logs(false),
+                    KeyCode::Char('j') | KeyCode::Down => self.scroll_logs(true),
                     _ => {}
                 }
                 return Ok(false);
@@ -212,6 +220,16 @@ impl App {
             while let Ok(line) = rx.try_recv() {
                 self.logs.push(line);
             }
+        }
+    }
+    fn scroll_logs(&mut self, down: bool) {
+        if down {
+            self.scroll_offset = self.scroll_offset.saturating_sub(1);
+        } else {
+            self.scroll_offset = self
+                .scroll_offset
+                .saturating_add(1)
+                .clamp(0, self.max_log_lines);
         }
     }
 
