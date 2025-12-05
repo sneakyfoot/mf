@@ -5,9 +5,9 @@ use k8s_openapi::chrono::{DateTime, Utc};
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
-    layout::Constraint,
+    layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
-    widgets::{Block, Borders, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, TableState, Wrap},
 };
 use std::error::Error;
 use std::time::Duration;
@@ -31,7 +31,7 @@ pub struct App {
 
 enum Mode {
     Table,
-    Logs { pod: String },
+    Logs { pod: String, start: DateTime<Utc> },
 }
 
 impl App {
@@ -83,9 +83,9 @@ impl App {
     pub fn draw(&mut self, frame: &mut Frame) {
         match &self.mode {
             Mode::Table => self.draw_table(frame),
-            Mode::Logs { pod } => {
+            Mode::Logs { pod, start } => {
                 let pod = pod.clone();
-                self.draw_logs(frame, &pod);
+                self.draw_logs(frame, &pod, &start.clone());
             }
         }
     }
@@ -98,10 +98,16 @@ impl App {
                 .as_ref()
                 .map(format_age)
                 .unwrap_or_else(|| "n/a".into());
+            let run_time = item
+                .started_at
+                .as_ref()
+                .map(|s| format_run_time(&s, &item.finished_at.unwrap_or_else(Utc::now)))
+                .unwrap_or_else(|| "n/a".into());
             Row::new(vec![
                 item.name.clone(),
                 item.status.clone(),
                 item.node.clone(),
+                run_time,
                 age,
             ])
         });
@@ -109,13 +115,14 @@ impl App {
         let table = Table::new(
             rows,
             [
-                Constraint::Percentage(55),
-                Constraint::Percentage(15),
+                Constraint::Percentage(50),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
                 Constraint::Percentage(15),
                 Constraint::Percentage(15),
             ],
         )
-        .header(Row::new(vec!["Name", "Status", "Node", "Age"]))
+        .header(Row::new(vec!["Name", "Status", "Node", "Run Time", "Age"]))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
         .highlight_symbol("⇝");
 
@@ -123,8 +130,13 @@ impl App {
     }
 
     // Log view
-    fn draw_logs(&mut self, frame: &mut Frame, pod: &str) {
+    fn draw_logs(&mut self, frame: &mut Frame, pod: &str, start: &DateTime<Utc>) {
         let area = frame.area();
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(2)])
+            .split(area);
 
         let text = if self.logs.is_empty() {
             "(no data yet)".to_string()
@@ -140,11 +152,25 @@ impl App {
             .block(block)
             .wrap(Wrap { trim: false });
 
-        let total_lines = para.line_count(area.width) as u16;
-        let mut scroll_y = total_lines.saturating_sub(area.height);
+        let total_lines = para.line_count(chunks[0].width) as u16;
+        let mut scroll_y = total_lines.saturating_sub(chunks[0].height);
         self.max_log_lines = scroll_y;
         scroll_y = scroll_y.saturating_sub(self.scroll_offset);
-        frame.render_widget(para.scroll((scroll_y, 0)), area);
+        frame.render_widget(para.scroll((scroll_y, 0)), chunks[0]);
+
+        if let Some(pct) = latest_alf_progress(&self.logs) {
+            let elapsed = Utc::now().signed_duration_since(*start).num_seconds();
+            let seconds_left = if pct >= 100 {
+                0.0
+            } else {
+                elapsed as f64 / ((pct as f64) / 100.0)
+            };
+            let eta = format_duration(Duration::from_secs_f64(seconds_left));
+            let gague = Gauge::default()
+                .block(Block::default().title(format!("ETA: {}", eta)))
+                .percent(pct);
+            frame.render_widget(gague, chunks[1]);
+        }
     }
 
     // Keybinds
@@ -159,7 +185,7 @@ impl App {
                 _ => {}
             },
             // Keybinds while in log mode
-            Mode::Logs { pod } => {
+            Mode::Logs { pod, start } => {
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('q') => {
                         self.mode = Mode::Table;
@@ -212,6 +238,7 @@ impl App {
             self.logs.clear();
             self.mode = Mode::Logs {
                 pod: idx.name.clone(),
+                start: idx.started_at.clone().unwrap_or_else(Utc::now),
             };
         }
     }
@@ -222,6 +249,7 @@ impl App {
             }
         }
     }
+
     fn scroll_logs(&mut self, down: bool) {
         if down {
             self.scroll_offset = self.scroll_offset.saturating_sub(1);
@@ -256,9 +284,29 @@ impl App {
     }
 }
 
+fn parse_alf_progress(line: &str) -> Option<u16> {
+    if !line.starts_with("ALF_PROGRESS") {
+        return None;
+    }
+    let pct_token = line.split_whitespace().nth(1)?;
+    let pct_str = pct_token.trim_end_matches('%');
+    let pct = pct_str.parse::<u16>().ok()?;
+    Some(pct.clamp(0, 100))
+}
+fn latest_alf_progress(lines: &[String]) -> Option<u16> {
+    lines.iter().rev().find_map(|line| parse_alf_progress(line))
+}
+
 // Turn pod birth time into human readble age string
 fn format_age(created: &DateTime<Utc>) -> String {
     let secs = Utc::now().signed_duration_since(*created).num_seconds();
+    if secs < 0 {
+        return "Unknown".to_string();
+    }
+    format_duration(Duration::from_secs(secs as u64)).to_string()
+}
+fn format_run_time(started: &DateTime<Utc>, finished: &DateTime<Utc>) -> String {
+    let secs = finished.signed_duration_since(*started).num_seconds();
     if secs < 0 {
         return "Unknown".to_string();
     }

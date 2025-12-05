@@ -11,6 +11,8 @@ pub struct Data {
     pub name: String,
     pub status: String,
     pub node: String,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
     pub created_at: Option<DateTime<Utc>>,
 }
 
@@ -41,11 +43,34 @@ fn pod_to_data(pod: Pod) -> Data {
         .as_ref()
         .and_then(|n| n.node_name.clone())
         .unwrap_or_else(|| "N/A".into());
+    let started_at = pod
+        .status
+        .as_ref()
+        .and_then(|s| s.start_time.as_ref())
+        .map(|s| s.0);
+    let finished_at = pod_finished_at(&pod);
     let created_at = pod.metadata.creation_timestamp.as_ref().map(|t| t.0);
     Data {
         name: pod.name_any(),
         status,
         node,
+        started_at,
+        finished_at,
         created_at,
     }
+}
+
+fn pod_finished_at(pod: &Pod) -> Option<DateTime<Utc>> {
+    pod.status
+        .as_ref()?
+        .container_statuses
+        .as_ref()?
+        .iter()
+        .filter_map(|cs| {
+            let state = cs.state.as_ref()?;
+            let term = state.terminated.clone()?;
+            term.finished_at
+        })
+        .max()
+        .map(|s| s.0)
 }
