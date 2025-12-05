@@ -8,15 +8,25 @@ use ratatui::{
     style::{Modifier, Style},
     widgets::{Row, Table, TableState},
 };
-use std::time::Duration;
-
 use std::error::Error;
+use std::time::Duration;
 use tokio::runtime::Runtime;
+
+////////////////////////
+/* Main App Interface */
+////////////////////////
 
 pub struct App {
     state: TableState,
     items: Vec<Data>,
     rt: Runtime,
+    mode: Mode,
+    logs: Vec<String>,
+}
+
+enum Mode {
+    Table,
+    Logs { pod: String },
 }
 
 impl App {
@@ -27,6 +37,8 @@ impl App {
             state: TableState::default().with_selected(0),
             items,
             rt,
+            mode: Mode::Table,
+            logs: Vec::new(),
         })
     }
 
@@ -38,11 +50,8 @@ impl App {
             if event::poll(tick)? {
                 if let Event::Key(key) = event::read()? {
                     if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                            KeyCode::Char('j') | KeyCode::Down => self.next(),
-                            KeyCode::Char('k') | KeyCode::Up => self.previous(),
-                            _ => {}
+                        if self.handle_key(key)? {
+                            return Ok(());
                         }
                     }
                 }
@@ -54,23 +63,18 @@ impl App {
         }
     }
 
-    pub fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) if i + 1 < self.items.len() => i + 1,
-            _ => 0,
-        };
-        self.state.select(Some(i));
-    }
-
-    pub fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(0) | None => self.items.len().saturating_sub(1),
-            Some(i) => i - 1,
-        };
-        self.state.select(Some(i));
-    }
-
     pub fn draw(&mut self, frame: &mut Frame) {
+        match &self.mode {
+            Mode::Table => self.draw_table(frame),
+            Mode::Logs { pod } => {
+                let pod = pod.clone();
+                self.draw_logs(frame, &pod);
+            }
+        }
+    }
+
+    // Main table view
+    fn draw_table(&mut self, frame: &mut Frame) {
         let rows = self.items.iter().map(|item| {
             let age = item
                 .created_at
@@ -93,6 +97,65 @@ impl App {
         .highlight_symbol(">> ");
 
         frame.render_stateful_widget(table, frame.area(), &mut self.state);
+    }
+
+    // Log view
+    fn draw_logs(&mut self, frame: &mut Frame, pod: &str) {
+        let block = ratatui::widgets::Block::default()
+            .title(format!("Logs for {}", pod))
+            .borders(ratatui::widgets::Borders::ALL);
+        frame.render_widget(block, frame.area());
+    }
+
+    // Keybinds
+    fn handle_key(&mut self, key: event::KeyEvent) -> Result<bool, Box<dyn Error>> {
+        match &self.mode {
+            // Keybinds while in default pod table
+            Mode::Table => match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
+                KeyCode::Char('j') | KeyCode::Down => self.next(),
+                KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                KeyCode::Enter => self.start_log_mode(),
+                _ => {}
+            },
+            // Keybinds while in log mode
+            Mode::Logs { pod } => {
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        self.mode = Mode::Table;
+                        self.logs.clear();
+                    }
+                    _ => {}
+                }
+                return Ok(false);
+            }
+        }
+        Ok(false)
+    }
+
+    fn start_log_mode(&mut self) {
+        if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
+            self.mode = Mode::Logs {
+                pod: idx.name.clone(),
+            };
+            self.logs.clear();
+        }
+    }
+
+    fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) if i + 1 < self.items.len() => i + 1,
+            _ => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(0) | None => self.items.len().saturating_sub(1),
+            Some(i) => i - 1,
+        };
+        self.state.select(Some(i));
     }
 }
 

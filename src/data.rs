@@ -17,7 +17,7 @@ pub async fn fetch_data() -> Result<Vec<Data>, Box<dyn Error>> {
     Ok(pods_to_data(pods))
 }
 
-pub fn pods_to_data(pods: Vec<Pod>) -> Vec<Data> {
+fn pods_to_data(pods: Vec<Pod>) -> Vec<Data> {
     pods.into_iter().map(pod_to_data).collect()
 }
 
