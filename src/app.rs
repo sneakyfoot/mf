@@ -53,7 +53,7 @@ impl App {
 
     // Main loop
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
-        let tick = Duration::from_secs(1);
+        let tick = Duration::from_millis(100);
         loop {
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -160,12 +160,12 @@ impl App {
 
         if let Some(pct) = latest_alf_progress(&self.logs) {
             let elapsed = Utc::now().signed_duration_since(*start).num_seconds();
-            let seconds_left = if pct >= 100 {
+            let seconds_left = if pct >= 100 || pct < 1 {
                 0.0
             } else {
-                elapsed as f64 / ((pct as f64) / 100.0)
+                (elapsed as f64 / ((pct as f64) / 100.0)) - elapsed as f64
             };
-            let eta = format_duration(Duration::from_secs_f64(seconds_left));
+            let eta = format_duration(Duration::from_secs_f64(seconds_left.round()));
             let gague = Gauge::default()
                 .block(Block::default().title(format!("ETA: {}", eta)))
                 .percent(pct);
