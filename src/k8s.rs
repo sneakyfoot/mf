@@ -5,12 +5,27 @@ use kube::{
 };
 use std::error::Error;
 
+const NAMESPACE: &str = "dcc";
+const FILTER_KEY: &str = "managed-by";
+const FILTER_VALUE: &str = "oom-scheduler";
+
 pub async fn get_pods() -> Result<Vec<Pod>, Box<dyn Error>> {
     let client = Client::try_default().await?;
-    let ns = "dcc";
+    let ns = NAMESPACE;
     let pods: Api<Pod> = Api::namespaced(client, ns);
     let list = pods.list(&ListParams::default()).await?;
-    Ok(list.items)
+    let filtered: Vec<Pod> = list
+        .into_iter()
+        .filter(|list| {
+            list.metadata
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.get(FILTER_KEY))
+                .map(|val| val == FILTER_VALUE)
+                .unwrap_or(false)
+        })
+        .collect();
+    Ok(filtered)
 }
 
 pub async fn stream_logs(pod: &str) -> Result<impl futures::AsyncBufRead + Unpin, kube::Error> {
