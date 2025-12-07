@@ -6,7 +6,7 @@ use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Direction, Layout},
-    style::{Modifier, Style},
+    style::{Modifier, Style, Stylize},
     widgets::{Block, Borders, Gauge, Paragraph, Row, Table, TableState, Wrap},
 };
 use std::error::Error;
@@ -103,6 +103,7 @@ impl App {
                 .as_ref()
                 .map(|s| format_run_time(&s, &item.finished_at.unwrap_or_else(Utc::now)))
                 .unwrap_or_else(|| "n/a".into());
+            let style = status_colors(&item.status);
             Row::new(vec![
                 item.name.clone(),
                 item.status.clone(),
@@ -110,6 +111,7 @@ impl App {
                 run_time,
                 age,
             ])
+            .style(style)
         });
 
         let table = Table::new(
@@ -168,6 +170,7 @@ impl App {
             let eta = format_duration(Duration::from_secs_f64(seconds_left.round()));
             let gague = Gauge::default()
                 .block(Block::default().title(format!("ETA: {}", eta)))
+                .gauge_style(Style::new().blue().on_black())
                 .percent(pct);
             frame.render_widget(gague, chunks[1]);
         }
@@ -284,6 +287,18 @@ impl App {
     }
 }
 
+// Status to colors for table view
+fn status_colors(status: &str) -> Style {
+    match status {
+        "Running" => Style::default().fg(ratatui::style::Color::Green),
+        "Pending" => Style::default().fg(ratatui::style::Color::Blue),
+        "Succeeded" => Style::default().fg(ratatui::style::Color::DarkGray),
+        "Failed" | "CrashLoopBackoff" => Style::default().fg(ratatui::style::Color::Red),
+        _ => Style::default(),
+    }
+}
+
+// Alf progress helpers
 fn parse_alf_progress(line: &str) -> Option<u16> {
     if !line.starts_with("ALF_PROGRESS") {
         return None;
