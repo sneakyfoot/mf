@@ -4,7 +4,7 @@ use k8s_openapi::{
     api::core::v1::Pod,
     chrono::{DateTime, Utc},
 };
-use kube::ResourceExt;
+use kube::{Client, ResourceExt};
 use std::cmp::Ordering;
 
 pub struct Data {
@@ -16,8 +16,8 @@ pub struct Data {
     pub created_at: Option<DateTime<Utc>>,
 }
 
-pub async fn fetch_data() -> Result<Vec<Data>, Box<dyn Error>> {
-    let pods = get_pods().await?;
+pub async fn fetch_data(client: Client) -> Result<Vec<Data>, Box<dyn Error>> {
+    let pods = get_pods(client).await?;
     Ok(pods_to_data(pods))
 }
 

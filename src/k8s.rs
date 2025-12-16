@@ -9,8 +9,7 @@ const NAMESPACE: &str = "dcc";
 const FILTER_KEY: &str = "managed-by";
 const FILTER_VALUE: &str = "oom-scheduler";
 
-pub async fn get_pods() -> Result<Vec<Pod>, Box<dyn Error>> {
-    let client = Client::try_default().await?;
+pub async fn get_pods(client: Client) -> Result<Vec<Pod>, Box<dyn Error>> {
     let ns = NAMESPACE;
     let pods: Api<Pod> = Api::namespaced(client, ns);
     let list = pods.list(&ListParams::default()).await?;
@@ -28,8 +27,10 @@ pub async fn get_pods() -> Result<Vec<Pod>, Box<dyn Error>> {
     Ok(filtered)
 }
 
-pub async fn stream_logs(pod: &str) -> Result<impl futures::AsyncBufRead + Unpin, kube::Error> {
-    let client = Client::try_default().await?;
+pub async fn stream_logs(
+    client: Client,
+    pod: &str,
+) -> Result<impl futures::AsyncBufRead + Unpin, kube::Error> {
     let ns = "dcc";
     let pods: Api<Pod> = Api::namespaced(client, ns);
     let lp = LogParams {
@@ -39,3 +40,5 @@ pub async fn stream_logs(pod: &str) -> Result<impl futures::AsyncBufRead + Unpin
     };
     pods.log_stream(pod, &lp).await
 }
+
+pub fn get_checkout_status() {}

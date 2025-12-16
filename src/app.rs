@@ -2,6 +2,7 @@ use crate::data::{Data, fetch_data};
 use crate::k8s::stream_logs;
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
+use kube::Client;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
@@ -27,6 +28,7 @@ pub struct App {
     logs: Vec<String>,
     log_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
     log_task: Option<tokio::task::JoinHandle<()>>,
+    client: Client,
 }
 
 enum Mode {
@@ -37,7 +39,8 @@ enum Mode {
 impl App {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let rt = Runtime::new()?;
-        let items = rt.block_on(fetch_data())?;
+        let client = rt.block_on(Client::try_default())?;
+        let items = rt.block_on(fetch_data(client.clone()))?;
         Ok(Self {
             state: TableState::default().with_selected(0),
             items,
@@ -48,12 +51,13 @@ impl App {
             logs: Vec::new(),
             log_rx: None,
             log_task: None,
+            client,
         })
     }
 
     // Main loop
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
-        let tick = Duration::from_millis(100);
+        let tick = Duration::from_millis(500);
         loop {
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -72,7 +76,7 @@ impl App {
                 if matches!(self.mode, Mode::Logs { .. }) {
                     self.drain_logs();
                 } else {
-                    if let Ok(items) = self.rt.block_on(fetch_data()) {
+                    if let Ok(items) = self.rt.block_on(fetch_data(self.client.clone())) {
                         self.items = items;
                     }
                 }
@@ -92,6 +96,18 @@ impl App {
 
     // Main table view
     fn draw_table(&mut self, frame: &mut Frame) {
+        // Define Regions
+        let area = frame.area();
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(1),
+                Constraint::Length(3),
+            ])
+            .split(area);
+
+        // Main job table
         let rows = self.items.iter().map(|item| {
             let age = item
                 .created_at
@@ -113,7 +129,6 @@ impl App {
             ])
             .style(style)
         });
-
         let table = Table::new(
             rows,
             [
@@ -126,9 +141,15 @@ impl App {
         )
         .header(Row::new(vec!["Name", "Status", "Node", "Run Time", "Age"]))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
-        .highlight_symbol("⇝");
+        .highlight_symbol("⇝")
+        .block(Block::bordered());
+        frame.render_stateful_widget(table, chunks[1], &mut self.state);
 
-        frame.render_stateful_widget(table, frame.area(), &mut self.state);
+        let info =
+            Paragraph::new("Mana Farm! Q to quit, Enter to view logs.").block(Block::bordered());
+        let checkout_status = Paragraph::new("This is a test").block(Block::bordered());
+        frame.render_widget(info, chunks[0]);
+        frame.render_widget(checkout_status, chunks[2]);
     }
 
     // Log view
@@ -190,11 +211,7 @@ impl App {
             // Keybinds while in log mode
             Mode::Logs { pod, start } => {
                 match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') => {
-                        self.mode = Mode::Table;
-                        self.scroll_offset = 0;
-                        self.logs.clear();
-                    }
+                    KeyCode::Esc | KeyCode::Char('q') => self.exit_log_mode(),
                     KeyCode::Char('k') | KeyCode::Up => self.scroll_logs(false),
                     KeyCode::Char('j') | KeyCode::Down => self.scroll_logs(true),
                     _ => {}
@@ -212,8 +229,9 @@ impl App {
             let pod = idx.name.clone();
             self.log_rx = Some(rx);
             let rt_handle = &self.rt;
+            let client = self.client.clone();
             self.log_task = Some(self.rt.spawn(async move {
-                match stream_logs(&pod).await {
+                match stream_logs(client, &pod).await {
                     Ok(reader) => {
                         use futures::AsyncBufReadExt;
                         use futures::StreamExt;
@@ -251,6 +269,15 @@ impl App {
                 self.logs.push(line);
             }
         }
+    }
+    fn exit_log_mode(&mut self) {
+        self.logs.clear();
+        self.scroll_offset = 0;
+        self.log_rx = None;
+        if let Some(handle) = self.log_task.take() {
+            handle.abort();
+        }
+        self.mode = Mode::Table;
     }
 
     fn scroll_logs(&mut self, down: bool) {
