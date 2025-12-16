@@ -9,7 +9,7 @@ use std::error::Error;
 const NAMESPACE: &str = "dcc";
 const FILTER_KEY: &str = "managed-by";
 const FILTER_VALUE: &str = "oom-scheduler";
-const CHECK_OUT_KEY: &str = "oom_farm";
+const CHECK_OUT_KEY: &str = "oom/farm";
 
 pub async fn get_pods(client: Client) -> Result<Vec<Pod>, Box<dyn Error>> {
     let ns = NAMESPACE;
