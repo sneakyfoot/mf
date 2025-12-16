@@ -8,7 +8,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEventKind},
     layout::{Constraint, Direction, Layout},
     style::{Modifier, Style, Stylize},
-    widgets::{Block, Borders, Gauge, Paragraph, Row, Table, TableState, Wrap},
+    widgets::{Block, Borders, Cell, Gauge, Paragraph, Row, Table, TableState, Wrap},
 };
 use std::error::Error;
 use std::time::Duration;
@@ -130,23 +130,21 @@ impl App {
             ])
             .style(style)
         });
-        let table = Table::new(
-            rows,
-            [
-                Constraint::Percentage(50),
-                Constraint::Percentage(10),
-                Constraint::Percentage(10),
-                Constraint::Percentage(10),
-                Constraint::Percentage(10),
-                Constraint::Percentage(10),
-            ],
-        )
-        .header(Row::new(vec![
-            "Name", "Status", "Artist", "Node", "Run Time", "Age",
-        ]))
-        .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
-        .highlight_symbol("⇝")
-        .block(Block::bordered());
+        let columns = [
+            ("Name", Constraint::Percentage(50)),
+            ("Status", Constraint::Percentage(10)),
+            ("Artist", Constraint::Percentage(10)),
+            ("Node", Constraint::Percentage(10)),
+            ("Run Time", Constraint::Percentage(10)),
+            ("Age", Constraint::Percentage(10)),
+        ];
+        let table = Table::new(rows, columns.iter().map(|(_, c)| *c))
+            .header(Row::new(
+                columns.iter().map(|(title, _)| Cell::from(*title)),
+            ))
+            .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
+            .highlight_symbol("⇝")
+            .block(Block::bordered());
         frame.render_stateful_widget(table, chunks[1], &mut self.state);
 
         let host_status = self
