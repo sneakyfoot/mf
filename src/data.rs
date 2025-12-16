@@ -16,11 +16,13 @@ pub struct Data {
     pub created_at: Option<DateTime<Utc>>,
 }
 
+/// Fetch data from Kubernetes pods and convert them into a sorted vector of Data structs.
 pub async fn fetch_data(client: Client) -> Result<Vec<Data>, Box<dyn Error>> {
     let pods = get_pods(client).await?;
     Ok(pods_to_data(pods))
 }
 
+/// Convert a vector of Pod objects into a sorted vector of Data structs.
 fn pods_to_data(pods: Vec<Pod>) -> Vec<Data> {
     let mut items: Vec<Data> = pods.into_iter().map(pod_to_data).collect();
     items.sort_by(|a, b| match (&a.created_at, &b.created_at) {
@@ -32,6 +34,7 @@ fn pods_to_data(pods: Vec<Pod>) -> Vec<Data> {
     items
 }
 
+/// Convert a single Pod object into a Data struct.
 fn pod_to_data(pod: Pod) -> Data {
     let status = pod
         .status
@@ -60,6 +63,7 @@ fn pod_to_data(pod: Pod) -> Data {
     }
 }
 
+/// Get the latest finished_at time from the terminated container statuses of a Pod.
 fn pod_finished_at(pod: &Pod) -> Option<DateTime<Utc>> {
     pod.status
         .as_ref()?

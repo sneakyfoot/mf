@@ -55,7 +55,7 @@ impl App {
         })
     }
 
-    // Main loop
+    /// Main app loop
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
         let tick = Duration::from_millis(500);
         loop {
@@ -94,7 +94,7 @@ impl App {
         }
     }
 
-    // Main table view
+    /// Main table view
     fn draw_table(&mut self, frame: &mut Frame) {
         // Define Regions
         let area = frame.area();
@@ -162,7 +162,7 @@ impl App {
         frame.render_widget(checkout_status, chunks[2]);
     }
 
-    // Log view
+    /// Log view
     fn draw_logs(&mut self, frame: &mut Frame, pod: &str, start: &DateTime<Utc>) {
         let area = frame.area();
 
@@ -207,7 +207,7 @@ impl App {
         }
     }
 
-    // Keybinds
+    /// Keybinds
     fn handle_key(&mut self, key: event::KeyEvent) -> Result<bool, Box<dyn Error>> {
         match &self.mode {
             // Keybinds while in default pod table
@@ -232,7 +232,7 @@ impl App {
         Ok(false)
     }
 
-    // Spawn async log stream
+    /// Spawn async log stream
     fn start_log_mode(&mut self) {
         if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -273,6 +273,7 @@ impl App {
             };
         }
     }
+    /// Get logs from async task
     fn drain_logs(&mut self) {
         if let Some(rx) = self.log_rx.as_mut() {
             while let Ok(line) = rx.try_recv() {
@@ -290,6 +291,7 @@ impl App {
         self.mode = Mode::Table;
     }
 
+    /// Clamping scroll for logs
     fn scroll_logs(&mut self, down: bool) {
         if down {
             self.scroll_offset = self.scroll_offset.saturating_sub(1);
@@ -301,7 +303,7 @@ impl App {
         }
     }
 
-    // Next line in table keymap
+    /// Next line in table keymap
     fn next(&mut self) {
         if let Some(i) = self.state.selected() {
             if i + 1 < self.items.len() {
@@ -312,7 +314,7 @@ impl App {
         }
     }
 
-    // Prev line in table keymap
+    /// Prev line in table keymap
     fn previous(&mut self) {
         if let Some(i) = self.state.selected() {
             if i > 0 {
@@ -324,7 +326,7 @@ impl App {
     }
 }
 
-// Status to colors for table view
+/// Status to colors for table view
 fn status_colors(status: &str) -> Style {
     match status {
         "Running" => Style::default().fg(ratatui::style::Color::Green),
@@ -335,7 +337,7 @@ fn status_colors(status: &str) -> Style {
     }
 }
 
-// Alf progress helpers
+/// Parse ALF_PROGRESS line from logs
 fn parse_alf_progress(line: &str) -> Option<u16> {
     if !line.starts_with("ALF_PROGRESS") {
         return None;
@@ -345,11 +347,12 @@ fn parse_alf_progress(line: &str) -> Option<u16> {
     let pct = pct_str.parse::<u16>().ok()?;
     Some(pct.clamp(0, 100))
 }
+/// Get latest ALF_PROGRESS from log lines
 fn latest_alf_progress(lines: &[String]) -> Option<u16> {
     lines.iter().rev().find_map(|line| parse_alf_progress(line))
 }
 
-// Turn pod birth time into human readble age string
+/// Turn pod birth time into human readble age string
 fn format_age(created: &DateTime<Utc>) -> String {
     let secs = Utc::now().signed_duration_since(*created).num_seconds();
     if secs < 0 {
@@ -357,6 +360,7 @@ fn format_age(created: &DateTime<Utc>) -> String {
     }
     format_duration(Duration::from_secs(secs as u64)).to_string()
 }
+/// Turn pod run time into human readble duration string
 fn format_run_time(started: &DateTime<Utc>, finished: &DateTime<Utc>) -> String {
     let secs = finished.signed_duration_since(*started).num_seconds();
     if secs < 0 {
