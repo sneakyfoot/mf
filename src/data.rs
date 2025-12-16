@@ -10,6 +10,7 @@ use std::cmp::Ordering;
 pub struct Data {
     pub name: String,
     pub status: String,
+    pub artist: String,
     pub node: String,
     pub started_at: Option<DateTime<Utc>>,
     pub finished_at: Option<DateTime<Utc>>,
@@ -46,6 +47,13 @@ fn pod_to_data(pod: Pod) -> Data {
         .as_ref()
         .and_then(|n| n.node_name.clone())
         .unwrap_or_else(|| "N/A".into());
+    let artist = pod
+        .metadata
+        .labels
+        .as_ref()
+        .and_then(|labels| labels.get("oom/artist"))
+        .cloned()
+        .unwrap_or_else(|| "Unknown".into());
     let started_at = pod
         .status
         .as_ref()
@@ -57,6 +65,7 @@ fn pod_to_data(pod: Pod) -> Data {
         name: pod.name_any(),
         status,
         node,
+        artist,
         started_at,
         finished_at,
         created_at,

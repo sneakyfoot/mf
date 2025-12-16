@@ -123,6 +123,7 @@ impl App {
             Row::new(vec![
                 item.name.clone(),
                 item.status.clone(),
+                item.artist.clone(),
                 item.node.clone(),
                 run_time,
                 age,
@@ -135,11 +136,14 @@ impl App {
                 Constraint::Percentage(50),
                 Constraint::Percentage(10),
                 Constraint::Percentage(10),
-                Constraint::Percentage(15),
-                Constraint::Percentage(15),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
             ],
         )
-        .header(Row::new(vec!["Name", "Status", "Node", "Run Time", "Age"]))
+        .header(Row::new(vec![
+            "Name", "Status", "Artist", "Node", "Run Time", "Age",
+        ]))
         .row_highlight_style(Style::default().add_modifier(Modifier::REVERSED))
         .highlight_symbol("⇝")
         .block(Block::bordered());
