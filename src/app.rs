@@ -1,5 +1,5 @@
 use crate::data::{Data, fetch_data};
-use crate::k8s::{get_checkout_status, stream_logs};
+use crate::k8s::{is_host_schedulable, stream_logs};
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
 use kube::Client;
@@ -147,10 +147,10 @@ impl App {
 
         let host_status = self
             .rt
-            .block_on(get_checkout_status(self.client.clone(), None));
+            .block_on(is_host_schedulable(self.client.clone(), None));
         let host_status = match host_status {
-            Ok(true) => "not on the farm.".to_string(),
-            Ok(false) => "on the farm.".to_string(),
+            Ok(false) => "not on the farm.".to_string(),
+            Ok(true) => "on the farm.".to_string(),
             Err(e) => format!("Error: {}", e).to_string(),
         };
 

@@ -43,7 +43,10 @@ pub async fn stream_logs(
     pods.log_stream(pod, &lp).await
 }
 
-pub async fn get_checkout_status(
+/// Check if the node is schedulable based on the label (key).
+/// If the label value is "true", the node is considered schedulable.
+/// If the label is missing or has any other value, the node is not schedulable
+pub async fn is_host_schedulable(
     client: Client,
     key: Option<&str>,
 ) -> Result<bool, Box<dyn Error>> {
@@ -54,7 +57,7 @@ pub async fn get_checkout_status(
     let labels = node.metadata.labels.unwrap_or_default();
     let value = labels.get(key);
     Ok(match value {
-        Some(v) if v == "false" => true,
+        Some(v) if v == "true" => true,
         _ => false,
     })
 }
