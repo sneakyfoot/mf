@@ -61,3 +61,23 @@ pub async fn is_host_schedulable(
         _ => false,
     })
 }
+
+pub async fn set_host_schedulable(
+    client: Client,
+    key: Option<&str>,
+    schedulable: bool,
+) -> Result<(), Box<dyn Error>> {
+    let key = key.unwrap_or(CHECK_OUT_KEY);
+    let node_name = hostname::get()?.to_string_lossy().into_owned();
+    let nodes: Api<Node> = Api::all(client);
+    let mut node = nodes.get(&node_name).await?;
+    let labels = node
+        .metadata
+        .labels
+        .get_or_insert_with(|| std::collections::BTreeMap::new());
+    labels.insert(key.to_string(), schedulable.to_string());
+    nodes
+        .replace(&node_name, &Default::default(), &node)
+        .await?;
+    Ok(())
+}

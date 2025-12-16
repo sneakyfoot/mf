@@ -1,5 +1,5 @@
 use crate::data::{Data, fetch_data};
-use crate::k8s::{is_host_schedulable, stream_logs};
+use crate::k8s::{is_host_schedulable, set_host_schedulable, stream_logs};
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
 use kube::Client;
@@ -151,13 +151,13 @@ impl App {
             .rt
             .block_on(is_host_schedulable(self.client.clone(), None));
         let host_status = match host_status {
-            Ok(false) => "not on the farm.".to_string(),
-            Ok(true) => "on the farm.".to_string(),
+            Ok(false) => "not on the farm. Press (p) to return it to the farm.".to_string(),
+            Ok(true) => "on the farm. Press (o) to check out your node.".to_string(),
             Err(e) => format!("Error: {}", e).to_string(),
         };
 
-        let info =
-            Paragraph::new("Mana Farm! Q to quit, Enter to view logs.").block(Block::bordered());
+        let info = Paragraph::new("MF - Mana Farm - (q) to quit, (Enter) to view logs.")
+            .block(Block::bordered());
         let checkout_status =
             Paragraph::new(format!("Your node is {}", &host_status)).block(Block::bordered());
         frame.render_widget(info, chunks[0]);
@@ -217,6 +217,22 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
                 KeyCode::Char('j') | KeyCode::Down => self.next(),
                 KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                KeyCode::Char('p') => {
+                    if let Err(e) =
+                        self.rt
+                            .block_on(set_host_schedulable(self.client.clone(), None, true))
+                    {
+                        eprintln!("Failed to mark host schedulable: {}", e);
+                    }
+                }
+                KeyCode::Char('o') => {
+                    if let Err(e) =
+                        self.rt
+                            .block_on(set_host_schedulable(self.client.clone(), None, false))
+                    {
+                        eprintln!("Failed to mark host unschedulable: {}", e);
+                    }
+                }
                 KeyCode::Enter => self.start_log_mode(),
                 _ => {}
             },
