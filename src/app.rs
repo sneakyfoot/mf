@@ -1,5 +1,5 @@
 use crate::data::{Data, fetch_data};
-use crate::k8s::stream_logs;
+use crate::k8s::{get_checkout_status, stream_logs};
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
 use kube::Client;
@@ -145,9 +145,19 @@ impl App {
         .block(Block::bordered());
         frame.render_stateful_widget(table, chunks[1], &mut self.state);
 
+        let host_status = self
+            .rt
+            .block_on(get_checkout_status(self.client.clone(), None));
+        let host_status = match host_status {
+            Ok(true) => "not on the farm.".to_string(),
+            Ok(false) => "on the farm.".to_string(),
+            Err(e) => format!("Error: {}", e).to_string(),
+        };
+
         let info =
             Paragraph::new("Mana Farm! Q to quit, Enter to view logs.").block(Block::bordered());
-        let checkout_status = Paragraph::new("This is a test").block(Block::bordered());
+        let checkout_status =
+            Paragraph::new(format!("Your node is {}", &host_status)).block(Block::bordered());
         frame.render_widget(info, chunks[0]);
         frame.render_widget(checkout_status, chunks[2]);
     }
@@ -228,7 +238,7 @@ impl App {
             let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
             let pod = idx.name.clone();
             self.log_rx = Some(rx);
-            let rt_handle = &self.rt;
+            // let rt_handle = &self.rt;
             let client = self.client.clone();
             self.log_task = Some(self.rt.spawn(async move {
                 match stream_logs(client, &pod).await {
