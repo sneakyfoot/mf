@@ -219,7 +219,7 @@ impl App {
                 _ => {}
             },
             // Keybinds while in log mode
-            Mode::Logs { pod, start } => {
+            Mode::Logs { pod: _, start: _ } => {
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('q') => self.exit_log_mode(),
                     KeyCode::Char('k') | KeyCode::Up => self.scroll_logs(false),
