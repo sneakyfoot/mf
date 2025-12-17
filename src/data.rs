@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 
 pub struct Data {
     pub name: String,
+    pub controller: Option<String>,
     pub status: String,
     pub artist: String,
     pub node: String,
@@ -37,6 +38,12 @@ fn pods_to_data(pods: Vec<Pod>) -> Vec<Data> {
 
 /// Convert a single Pod object into a Data struct.
 fn pod_to_data(pod: Pod) -> Data {
+    let controller = pod.metadata.owner_references.as_ref().and_then(|owners| {
+        owners
+            .iter()
+            .find(|o| o.kind == "Job")
+            .map(|o| o.name.clone())
+    });
     let status = pod
         .status
         .as_ref()
@@ -63,6 +70,7 @@ fn pod_to_data(pod: Pod) -> Data {
     let created_at = pod.metadata.creation_timestamp.as_ref().map(|t| t.0);
     Data {
         name: pod.name_any(),
+        controller,
         status,
         node,
         artist,

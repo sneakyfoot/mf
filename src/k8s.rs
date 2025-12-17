@@ -1,8 +1,9 @@
+use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Node;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
-    Client,
-    api::{Api, ListParams, LogParams},
+    Client, ResourceExt,
+    api::{Api, DeleteParams, ListParams, LogParams},
 };
 use std::error::Error;
 
@@ -79,5 +80,24 @@ pub async fn set_host_schedulable(
     nodes
         .replace(&node_name, &Default::default(), &node)
         .await?;
+    Ok(())
+}
+
+/// Cancel all jobs associated with the given controller id (final element provided by pdg).
+pub async fn cancel_jobs(client: Client, controller: &str) -> Result<(), Box<dyn Error>> {
+    let ns = NAMESPACE;
+    let controller_suffix = controller.rsplit('-').next();
+    let jobs: Api<Job> = Api::namespaced(client, ns);
+    let list = jobs.list(&ListParams::default()).await?;
+    for job in list.into_iter().filter(|j| {
+        j.metadata
+            .name
+            .as_deref()
+            .and_then(|n| n.rsplit('-').next())
+            == controller_suffix
+    }) {
+        jobs.delete(&job.name_any(), &DeleteParams::foreground())
+            .await?;
+    }
     Ok(())
 }

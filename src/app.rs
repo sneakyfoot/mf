@@ -1,5 +1,5 @@
 use crate::data::{Data, fetch_data};
-use crate::k8s::{is_host_schedulable, set_host_schedulable, stream_logs};
+use crate::k8s::{cancel_jobs, is_host_schedulable, set_host_schedulable, stream_logs};
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
 use kube::Client;
@@ -156,7 +156,7 @@ impl App {
             Err(e) => format!("Error: {}", e).to_string(),
         };
 
-        let info = Paragraph::new("MF - Mana Farm - (q) to quit, (Enter) to view logs.")
+        let info = Paragraph::new("MF - (q) to quit, (Enter) to view logs. (Shift + D) to cancel a job. Warning! No confirmations!")
             .block(Block::bordered());
         let checkout_status =
             Paragraph::new(format!("Your node is {}", &host_status)).block(Block::bordered());
@@ -217,6 +217,7 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
                 KeyCode::Char('j') | KeyCode::Down => self.next(),
                 KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                KeyCode::Char('D') => self.delete_key(),
                 KeyCode::Char('p') => {
                     if let Err(e) =
                         self.rt
@@ -307,6 +308,18 @@ impl App {
             handle.abort();
         }
         self.mode = Mode::Table;
+    }
+    fn delete_key(&mut self) {
+        if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
+            if let Some(controller) = idx.controller.as_deref() {
+                if let Err(e) = self
+                    .rt
+                    .block_on(cancel_jobs(self.client.clone(), controller))
+                {
+                    eprintln!("Failed to cancel job {}", e);
+                }
+            }
+        }
     }
 
     /// Clamping scroll for logs
