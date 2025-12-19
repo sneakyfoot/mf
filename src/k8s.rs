@@ -3,14 +3,15 @@ use k8s_openapi::api::core::v1::Node;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
     Client, ResourceExt,
-    api::{Api, DeleteParams, ListParams, LogParams},
+    api::{Api, DeleteParams, ListParams, LogParams, Patch, PatchParams},
 };
+use serde_json::{Map, Value, json};
 use std::error::Error;
 
 const NAMESPACE: &str = "dcc";
 const FILTER_KEY: &str = "managed-by";
 const FILTER_VALUE: &str = "oom-scheduler";
-const CHECK_OUT_KEY: &str = "oom/farm";
+const CHECK_OUT_KEY: &str = "oom/schedulable";
 
 pub async fn get_pods(client: Client) -> Result<Vec<Pod>, Box<dyn Error>> {
     let ns = NAMESPACE;
@@ -71,14 +72,19 @@ pub async fn set_host_schedulable(
     let key = key.unwrap_or(CHECK_OUT_KEY);
     let node_name = hostname::get()?.to_string_lossy().into_owned();
     let nodes: Api<Node> = Api::all(client);
-    let mut node = nodes.get(&node_name).await?;
-    let labels = node
-        .metadata
-        .labels
-        .get_or_insert_with(|| std::collections::BTreeMap::new());
-    labels.insert(key.to_string(), schedulable.to_string());
+    let mut labels = Map::<String, Value>::new();
+    labels.insert(key.to_string(), Value::String(schedulable.to_string()));
+    let patch = json!({
+        "apiVersion": "v1",
+        "kind": "Node",
+        "metadata": {
+            "name": node_name,
+            "labels": labels,
+        }
+    });
+    let parms = PatchParams::apply("flux-client-side-apply").force();
     nodes
-        .replace(&node_name, &Default::default(), &node)
+        .patch(&node_name, &parms, &Patch::Apply(&patch))
         .await?;
     Ok(())
 }

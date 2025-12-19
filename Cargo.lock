@@ -1394,6 +1394,7 @@ dependencies = [
  "mini-redis",
  "ratatui",
  "schemars",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",
