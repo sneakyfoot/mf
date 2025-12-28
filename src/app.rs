@@ -153,7 +153,7 @@ impl App {
         let host_status = match host_status {
             Ok(false) => "not on the farm. Press (p) to return it to the farm.".to_string(),
             Ok(true) => "on the farm. Press (o) to check out your node.".to_string(),
-            Err(e) => format!("Error: {}", e).to_string(),
+            Err(_) => "not part of the cluster.".to_string(),
         };
 
         let info = Paragraph::new("MF - (q) to quit, (Enter) to view logs. (Shift + D) to cancel a job. Warning! No confirmations!")
