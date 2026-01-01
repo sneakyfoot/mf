@@ -7,10 +7,10 @@
 
   outputs = { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
-
-      mfPackage = pkgs.rustPlatform.buildRustPackage {
+      systems = [ "x86_64-linux" "aarch64-darwin" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+      mkPkgs = system: import nixpkgs { inherit system; };
+      mkMfPackage = pkgs: pkgs.rustPlatform.buildRustPackage {
         pname = "mf";
         version = "0.1.0";
         src = pkgs.lib.cleanSource ./.;
@@ -19,26 +19,42 @@
         };
       };
     in {
-      packages.${system} = {
-        default = mfPackage;
-        mf = mfPackage;
-      };
+      packages = forAllSystems (system:
+        let
+          pkgs = mkPkgs system;
+          mfPackage = mkMfPackage pkgs;
+        in {
+          default = mfPackage;
+          mf = mfPackage;
+        });
 
-      apps.${system}.default = {
-        type = "app";
-        program = "${mfPackage}/bin/mf";
-      };
+      apps = forAllSystems (system:
+        let
+          pkgs = mkPkgs system;
+          mfPackage = mkMfPackage pkgs;
+        in {
+          default = {
+            type = "app";
+            program = "${mfPackage}/bin/mf";
+          };
+        });
 
-      devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [
-          rustc
-          cargo
-          rust-analyzer
-          rustfmt
-          pkg-config
-          kubectl
-        ];
-        inputsFrom = [ mfPackage ];
-      };
+      devShells = forAllSystems (system:
+        let
+          pkgs = mkPkgs system;
+          mfPackage = mkMfPackage pkgs;
+        in {
+          default = pkgs.mkShell {
+            packages = with pkgs; [
+              rustc
+              cargo
+              rust-analyzer
+              rustfmt
+              pkg-config
+              kubectl
+            ];
+            inputsFrom = [ mfPackage ];
+          };
+        });
     };
 }
