@@ -26,7 +26,7 @@ pub struct App {
     log_task: Option<tokio::task::JoinHandle<()>>,
     client: Client,
     confirmation_popup: bool,
-    confirmation: bool,
+    //confirmation: bool,
     pending_confirmation: Option<ConfirmAction>,
 }
 enum Mode {
@@ -50,7 +50,7 @@ impl App {
             log_task: None,
             client,
             confirmation_popup: false,
-            confirmation: false,
+            //confirmation: false,
             pending_confirmation: None,
         })
     }
@@ -95,9 +95,11 @@ impl App {
         match &self.mode {
             // Keybinds while in default pod table
             Mode::Table => match key.code {
+                KeyCode::Enter => self.start_log_mode(),
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
                 KeyCode::Char('j') | KeyCode::Down => self.next(),
                 KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                KeyCode::Char('D') => self.delete_key(),
                 KeyCode::Char('y') => {
                     if self.confirmation_popup {
                         self.yes_key()
@@ -108,7 +110,6 @@ impl App {
                         self.no_key()
                     }
                 }
-                KeyCode::Char('D') => self.delete_key(),
                 KeyCode::Char('p') => {
                     if let Err(e) =
                         self.rt
@@ -125,7 +126,6 @@ impl App {
                         eprintln!("Failed to mark host unschedulable: {}", e);
                     }
                 }
-                KeyCode::Enter => self.start_log_mode(),
                 _ => {}
             },
             // Keybinds while in log mode
