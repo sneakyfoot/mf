@@ -1,6 +1,10 @@
 use crate::app::confirmation::ConfirmAction;
 use crate::data::{Data, fetch_data};
-use crate::k8s::set_host_schedulable;
+
+pub mod confirmation;
+pub mod logs;
+pub mod table;
+
 use k8s_openapi::chrono::{DateTime, Utc};
 use kube::Client;
 use ratatui::{
@@ -11,9 +15,7 @@ use ratatui::{
 use std::error::Error;
 use std::time::Duration;
 use tokio::runtime::Runtime;
-pub mod confirmation;
-pub mod logs;
-pub mod table;
+
 pub struct App {
     state: TableState,
     items: Vec<Data>,
@@ -26,13 +28,14 @@ pub struct App {
     log_task: Option<tokio::task::JoinHandle<()>>,
     client: Client,
     confirmation_popup: bool,
-    //confirmation: bool,
     pending_confirmation: Option<ConfirmAction>,
 }
+
 enum Mode {
     Table,
     Logs { pod: String, start: DateTime<Utc> },
 }
+
 impl App {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let rt = Runtime::new()?;
@@ -50,10 +53,10 @@ impl App {
             log_task: None,
             client,
             confirmation_popup: false,
-            //confirmation: false,
             pending_confirmation: None,
         })
     }
+
     /// Main app loop
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
         let tick = Duration::from_millis(500);
@@ -81,6 +84,7 @@ impl App {
             }
         }
     }
+
     pub fn draw(&mut self, frame: &mut Frame) {
         match &self.mode {
             Mode::Table => self.draw_table(frame),
@@ -90,6 +94,7 @@ impl App {
             }
         }
     }
+
     /// Keybinds
     fn handle_key(&mut self, key: event::KeyEvent) -> Result<bool, Box<dyn Error>> {
         match &self.mode {
@@ -99,7 +104,9 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
                 KeyCode::Char('j') | KeyCode::Down => self.next(),
                 KeyCode::Char('k') | KeyCode::Up => self.previous(),
-                KeyCode::Char('D') => self.delete_key(),
+                KeyCode::Char('D') => self.delete_key(), // Kill jobs
+                KeyCode::Char('o') => self.checkout_key(false), // Set is schedulable false
+                KeyCode::Char('p') => self.checkout_key(true), // Set is schedulable true
                 KeyCode::Char('y') => {
                     if self.confirmation_popup {
                         self.yes_key()
@@ -108,22 +115,6 @@ impl App {
                 KeyCode::Char('n') => {
                     if self.confirmation_popup {
                         self.no_key()
-                    }
-                }
-                KeyCode::Char('p') => {
-                    if let Err(e) =
-                        self.rt
-                            .block_on(set_host_schedulable(self.client.clone(), None, true))
-                    {
-                        eprintln!("Failed to mark host schedulable: {}", e);
-                    }
-                }
-                KeyCode::Char('o') => {
-                    if let Err(e) =
-                        self.rt
-                            .block_on(set_host_schedulable(self.client.clone(), None, false))
-                    {
-                        eprintln!("Failed to mark host unschedulable: {}", e);
                     }
                 }
                 _ => {}

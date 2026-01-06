@@ -29,7 +29,7 @@ impl App {
         if let Some(action) = self.pending_confirmation.take() {
             match action {
                 ConfirmAction::CancelJob { controller } => self.run_cancel_jobs(controller),
-                ConfirmAction::CheckoutNode { schedulable } => self.log_task,
+                ConfirmAction::CheckoutNode { schedulable } => self.run_checkout(schedulable),
             }
         }
     }

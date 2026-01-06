@@ -1,5 +1,5 @@
 use super::App;
-use crate::k8s::{cancel_jobs, is_host_schedulable};
+use crate::k8s::{cancel_jobs, is_host_schedulable, set_host_schedulable};
 
 use humantime::format_duration;
 use k8s_openapi::chrono::{DateTime, Utc};
@@ -81,6 +81,8 @@ impl App {
         self.show_confirmation(frame);
     }
 
+    /// Spawns the confirmation for job deletion, to kill all jobs that share the same "controller"
+    /// id
     pub fn delete_key(&mut self) {
         if let Some(controller) = self
             .state
@@ -102,6 +104,22 @@ impl App {
                 eprintln!("Failed to cancel job {}", e);
             }
         });
+    }
+
+    pub fn checkout_key(&mut self, checkout: bool) {
+        self.pending_confirmation = Some(crate::app::ConfirmAction::CheckoutNode {
+            schedulable: (checkout),
+        });
+        self.confirmation_popup = true;
+    }
+
+    pub fn run_checkout(&mut self, checkout: bool) {
+        if let Err(e) = self
+            .rt
+            .block_on(set_host_schedulable(self.client.clone(), None, checkout))
+        {
+            eprintln!("Failed to mark host schedulable: {}", e);
+        }
     }
 
     /// Next line in table keymap
