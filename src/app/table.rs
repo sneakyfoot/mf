@@ -69,8 +69,9 @@ impl App {
             Ok(true) => "on the farm. Press (o) to check out your node.".to_string(),
             Err(_) => "not part of the cluster.".to_string(),
         };
-        let info = Paragraph::new("MF - (q) to quit, (Enter) to view logs. (Shift + D) to cancel a job. Warning! No confirmations!")
-            .block(Block::bordered());
+        let info =
+            Paragraph::new("MF - (q) to quit, (Enter) to view logs. (Shift + D) to cancel a job.")
+                .block(Block::bordered());
         let checkout_status =
             Paragraph::new(format!("Your node is {}", &host_status)).block(Block::bordered());
         frame.render_widget(info, chunks[0]);
@@ -79,22 +80,25 @@ impl App {
         self.show_confirmation(frame);
     }
     pub fn delete_key(&mut self) {
-        self.pending_confirmation = Some(crate::app::ConfirmAction::CancelJob {
-            controller: "null".to_string(),
-        });
-        self.confirmation_popup = true;
+        if let Some(controller) = self
+            .state
+            .selected()
+            .and_then(|i| self.items.get(i))
+            .and_then(|idx| idx.controller.as_ref())
+        {
+            self.pending_confirmation = Some(crate::app::ConfirmAction::CancelJob {
+                controller: controller.clone(),
+            });
+            self.confirmation_popup = true;
+        }
     }
-    pub fn delete_jobs(&mut self) {
-        // if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
-        //     if let Some(controller) = idx.controller.as_deref() {
-        //         if let Err(e) = self
-        //             .rt
-        //             .block_on(cancel_jobs(self.client.clone(), controller))
-        //         {
-        //             eprintln!("Failed to cancel job {}", e);
-        //         }
-        //     }
-        // }
+    pub fn run_cancel_jobs(&mut self, controller: &str) {
+        if let Err(e) = self
+            .rt
+            .block_on(cancel_jobs(self.client.clone(), controller))
+        {
+            eprintln!("Failed to cancel job {}", e);
+        }
     }
     /// Next line in table keymap
     pub fn next(&mut self) {

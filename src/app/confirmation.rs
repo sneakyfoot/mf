@@ -16,16 +16,18 @@ impl App {
     pub fn show_confirmation(&mut self, frame: &mut Frame) {
         if self.confirmation_popup {
             let area = frame.area();
-            let block = Block::bordered().title("Popup");
+            let block = Block::bordered().title("Confirmation");
+            let text = "This is the confirmation";
+            let content = Paragraph::new(text).centered().block(block);
             let area = popup_area(area, 60, 20);
             frame.render_widget(Clear, area); //this clears out the background
-            frame.render_widget(block, area);
+            frame.render_widget(content, area);
         }
     }
     pub fn yes_key(&mut self) {
         if let Some(action) = self.pending_confirmation.take() {
             match action {
-                ConfirmAction::CancelJob { controller } => self.delete_key(),
+                ConfirmAction::CancelJob { controller } => self.run_cancel_jobs(&controller),
             }
         }
         self.confirmation_popup = false;
