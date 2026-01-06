@@ -75,18 +75,26 @@ impl App {
             Paragraph::new(format!("Your node is {}", &host_status)).block(Block::bordered());
         frame.render_widget(info, chunks[0]);
         frame.render_widget(checkout_status, chunks[2]);
+
+        self.show_confirmation(frame);
     }
     pub fn delete_key(&mut self) {
-        if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
-            if let Some(controller) = idx.controller.as_deref() {
-                if let Err(e) = self
-                    .rt
-                    .block_on(cancel_jobs(self.client.clone(), controller))
-                {
-                    eprintln!("Failed to cancel job {}", e);
-                }
-            }
-        }
+        self.pending_confirmation = Some(crate::app::ConfirmAction::CancelJob {
+            controller: "null".to_string(),
+        });
+        self.confirmation_popup = true;
+    }
+    pub fn delete_jobs(&mut self) {
+        // if let Some(idx) = self.state.selected().and_then(|i| self.items.get(i)) {
+        //     if let Some(controller) = idx.controller.as_deref() {
+        //         if let Err(e) = self
+        //             .rt
+        //             .block_on(cancel_jobs(self.client.clone(), controller))
+        //         {
+        //             eprintln!("Failed to cancel job {}", e);
+        //         }
+        //     }
+        // }
     }
     /// Next line in table keymap
     pub fn next(&mut self) {

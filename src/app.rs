@@ -1,3 +1,4 @@
+use crate::app::confirmation::ConfirmAction;
 use crate::data::{Data, fetch_data};
 use crate::k8s::set_host_schedulable;
 use k8s_openapi::chrono::{DateTime, Utc};
@@ -10,6 +11,7 @@ use ratatui::{
 use std::error::Error;
 use std::time::Duration;
 use tokio::runtime::Runtime;
+pub mod confirmation;
 pub mod logs;
 pub mod table;
 pub struct App {
@@ -23,6 +25,9 @@ pub struct App {
     log_rx: Option<tokio::sync::mpsc::UnboundedReceiver<String>>,
     log_task: Option<tokio::task::JoinHandle<()>>,
     client: Client,
+    confirmation_popup: bool,
+    confirmation: bool,
+    pending_confirmation: Option<ConfirmAction>,
 }
 enum Mode {
     Table,
@@ -44,6 +49,9 @@ impl App {
             log_rx: None,
             log_task: None,
             client,
+            confirmation_popup: false,
+            confirmation: false,
+            pending_confirmation: None,
         })
     }
     /// Main app loop
@@ -90,6 +98,16 @@ impl App {
                 KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
                 KeyCode::Char('j') | KeyCode::Down => self.next(),
                 KeyCode::Char('k') | KeyCode::Up => self.previous(),
+                KeyCode::Char('y') => {
+                    if self.confirmation_popup {
+                        self.yes_key()
+                    }
+                }
+                KeyCode::Char('n') => {
+                    if self.confirmation_popup {
+                        self.no_key()
+                    }
+                }
                 KeyCode::Char('D') => self.delete_key(),
                 KeyCode::Char('p') => {
                     if let Err(e) =
