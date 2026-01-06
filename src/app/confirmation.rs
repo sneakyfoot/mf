@@ -28,10 +28,12 @@ impl App {
                 ConfirmAction::CancelJob { controller } => self.delete_key(),
             }
         }
+        self.confirmation_popup = false;
+        self.pending_confirmation = None;
     }
     pub fn no_key(&mut self) {
-        self.pending_confirmation = None;
         self.confirmation_popup = false;
+        self.pending_confirmation = None;
     }
 }
 /// helper function to create a centered rect using up certain percentage of the available rect `r`
